@@ -47,4 +47,5 @@
 .\_build\main.o: C:\Keil_v5\ARM\PACK\NordicSemiconductor\nRF_Examples\8.1.1\bsp\boards.h
 .\_build\main.o: C:\Keil_v5\ARM\PACK\NordicSemiconductor\nRF_Examples\8.1.1\bsp\pca10028.h
 .\_build\main.o: \\psf\Home\Documents\ble_peripheral\ble_custom_service_example\pca10028\s110\arm5\RTE\nRF_Libraries\nRF51422_xxAC\app_button.h
+.\_build\main.o: ..\arm5\ble_lbs.h
 .\_build\main.o: ..\..\..\RTT\SEGGER_RTT.h

@@ -41,14 +41,19 @@
 #include "softdevice_handler.h"
 #include "app_timer_appsh.h"
 #include "bsp.h"
+#include "ble_lbs.h"
 
 #include "SEGGER_RTT.h" // real-time debugger
 
 #define IS_SRVC_CHANGED_CHARACT_PRESENT 0                                           /**< Include or not the service_changed characteristic. if not enabled, the server's database cannot be changed for the lifetime of the device*/
 
 #define WAKEUP_BUTTON_ID                0                                           /**< Button used to wake up the application. */
+#define LEDBUTTON_BUTTON_ID             1
 // YOUR_JOB: Define any other buttons to be used by the applications:
 // #define MY_BUTTON_ID                   1
+#define ADVERTISING_LED_PIN_NO 					LED_2
+#define CONNECTED_LED_PIN_NO   					LED_3
+#define LEDBUTTON_LED_PIN_NO   					LED_1
 
 #define DEVICE_NAME                     "Buttons_Template"                           /**< Name of device. Will be included in the advertising data. */
 
@@ -68,6 +73,8 @@
 #define NEXT_CONN_PARAMS_UPDATE_DELAY   APP_TIMER_TICKS(30000, APP_TIMER_PRESCALER) /**< Time between each call to sd_ble_gap_conn_param_update after the first call (30 seconds). */
 #define MAX_CONN_PARAMS_UPDATE_COUNT    3                                           /**< Number of attempts before giving up the connection parameter negotiation. */
 
+#define APP_GPIOTE_MAX_USERS            1                                           /**< Maximum number of users of the GPIOTE handler. */
+
 #define SEC_PARAM_BOND                  1                                           /**< Perform bonding. */
 #define SEC_PARAM_MITM                  0                                           /**< Man In The Middle protection not required. */
 #define SEC_PARAM_IO_CAPABILITIES       BLE_GAP_IO_CAPS_NONE                        /**< No I/O capabilities. */
@@ -84,9 +91,10 @@
 
 static ble_gap_sec_params_t             m_sec_params;                               /**< Security requirements for this application. */
 static uint16_t                         m_conn_handle = BLE_CONN_HANDLE_INVALID;    /**< Handle of the current connection. */
+static ble_lbs_t                        m_lbs;
 
 // YOUR_JOB: Initialize UUIDs for service(s) used in your application.
-ble_uuid_t m_adv_uuids[] = {{BLE_UUID_BATTERY_SERVICE, BLE_UUID_TYPE_BLE}};         /**< Universally unique service identifiers. */
+ble_uuid_t m_adv_uuids[] = {{LBS_UUID_SERVICE, BLE_UUID_TYPE_BLE}};         /**< Universally unique service identifiers. */
 
 
 /**@brief Callback function for asserts in the SoftDevice.
@@ -173,13 +181,37 @@ static void gap_params_init(void)
     APP_ERROR_CHECK(err_code);
 }
 
+static void leds_init(void)
+{
+    GPIO_LED_CONFIG(ADVERTISING_LED_PIN_NO);
+    GPIO_LED_CONFIG(CONNECTED_LED_PIN_NO);
+    GPIO_LED_CONFIG(LEDBUTTON_LED_PIN_NO);
+}
 
+static void led_write_handler(ble_lbs_t * p_lbs, uint8_t led_state)
+{
+    if (led_state)
+    {
+        nrf_gpio_pin_set(LEDBUTTON_LED_PIN_NO);
+    }
+    else
+    {
+        nrf_gpio_pin_clear(LEDBUTTON_LED_PIN_NO);
+    }
+}
 
 /**@brief Function for initializing services that will be used by the application.
  */
 static void services_init(void)
 {
     // YOUR_JOB: Add code to initialize the services used by the application.
+    uint32_t err_code;
+    ble_lbs_init_t init;
+    
+    init.led_write_handler = led_write_handler;
+    
+    err_code = ble_lbs_init(&m_lbs, &init);
+    APP_ERROR_CHECK(err_code);
 }
 
 
@@ -314,6 +346,7 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
     uint32_t                         err_code;
     static ble_gap_evt_auth_status_t m_auth_status;
     bool                             master_id_matches;
+	
     ble_gap_sec_kdist_t *            p_distributed_keys;
     ble_gap_enc_info_t *             p_enc_info;
     ble_gap_irk_t *                  p_id_info;
@@ -337,20 +370,28 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
                             1. Make sure that app_button_disable() is called when handling
                                BLE_GAP_EVT_DISCONNECTED below.
                             2. Make sure the app_button module is initialized.*/
+//            nrf_gpio_pin_set(CONNECTED_LED_PIN_NO);
+//            nrf_gpio_pin_clear(ADVERTISING_LED_PIN_NO);
+//            m_conn_handle = p_ble_evt->evt.gap_evt.conn_handle;
+
             err_code = app_button_enable();
-            APP_ERROR_CHECK(err_code);
+						APP_ERROR_CHECK(err_code);
             
             break;
 
         case BLE_GAP_EVT_DISCONNECTED:
+            nrf_gpio_pin_clear(CONNECTED_LED_PIN_NO);
             m_conn_handle = BLE_CONN_HANDLE_INVALID;
 
             /* YOUR_JOB: Uncomment this part if you are using the app_button module to handle button
                          events. This should be done to save power when not connected
                          to a peer.*/
             err_code = app_button_disable();
-            APP_ERROR_CHECK(err_code);
-            
+            if (err_code == NRF_SUCCESS)
+            {
+							err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
+							APP_ERROR_CHECK(err_code);
+            }
             break;
 
         case BLE_GAP_EVT_SEC_PARAMS_REQUEST:
@@ -387,6 +428,17 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
                 APP_ERROR_CHECK(err_code);
             break;
 
+//        case BLE_GAP_EVT_TIMEOUT:
+//            if (p_ble_evt->evt.gap_evt.params.timeout.src == BLE_GAP_TIMEOUT_SRC_ADVERTISEMENT)
+//            { 
+//                nrf_gpio_pin_clear(ADVERTISING_LED_PIN_NO);
+
+//                // Go to system-off mode (this function will not return; wakeup will cause a reset)
+//                GPIO_WAKEUP_BUTTON_CONFIG(WAKEUP_BUTTON_PIN);
+//                err_code = sd_power_system_off();    
+//            }
+//            break;				
+				
         default:
             // No implementation needed.
             break;
@@ -405,7 +457,7 @@ static void ble_evt_dispatch(ble_evt_t * p_ble_evt)
 {
     on_ble_evt(p_ble_evt);
     ble_conn_params_on_ble_evt(p_ble_evt);
-    ble_advertising_on_ble_evt(p_ble_evt);
+    ble_lbs_on_ble_evt(&m_lbs, p_ble_evt);
 
     /*
     YOUR_JOB: Add service ble_evt handlers calls here, like, for example:
@@ -459,6 +511,20 @@ static void ble_stack_init(void)
     APP_ERROR_CHECK(err_code);
 }
 
+/**@brief Function for the Event Scheduler initialization.
+ */
+//static void scheduler_init(void)
+//{
+//    APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
+//}
+
+
+/**@brief Function for initializing the GPIOTE handler module.
+ */
+static void gpiote_init(void)
+{
+    APP_GPIOTE_INIT(APP_GPIOTE_MAX_USERS);
+}
 
 /**@brief Function for initializing the Advertising functionality.
  */
@@ -501,26 +567,60 @@ static void scheduler_init(void)
 /* YOUR_JOB: Uncomment this function if you need to handle button events.*/
 static void bsp_event_handler(bsp_event_t evt)
 {	
+    static uint8_t send_push = 1;
+    uint32_t err_code;
+	
         switch (evt)
         {
             case BSP_EVENT_KEY_0:
 								printf("BSP_EVENT_KEY_0!\n");
-                // Code to handle BSP_EVENT_KEY_0
-                break;
+						    err_code = ble_lbs_on_button_change(&m_lbs, send_push);
+								if (err_code != NRF_SUCCESS &&
+									err_code != BLE_ERROR_INVALID_CONN_HANDLE &&
+									err_code != NRF_ERROR_INVALID_STATE)
+								{
+									APP_ERROR_CHECK(err_code);
+								}
+								send_push = !send_push;
+            break;
             case BSP_EVENT_KEY_1:
 								printf("BSP_EVENT_KEY_1!\n");
-                // Code to handle BSP_EVENT_KEY_0
-                break;
-            case BSP_EVENT_KEY_2:
+						        nrf_gpio_pin_clear(LED_2);
+						    err_code = ble_lbs_on_button_change(&m_lbs, send_push);
+								if (err_code != NRF_SUCCESS &&
+									err_code != BLE_ERROR_INVALID_CONN_HANDLE &&
+									err_code != NRF_ERROR_INVALID_STATE)
+								{
+									APP_ERROR_CHECK(err_code);
+									printf("BSP_EVENT_KEY_1 fail!\n");									
+								}
+								send_push = !send_push;
+            break;
+						case BSP_EVENT_KEY_2:
 								printf("BSP_EVENT_KEY_2!\n");
-                // Code to handle BSP_EVENT_KEY_0
-                break;
+						        nrf_gpio_pin_set(LED_2);
+						    err_code = ble_lbs_on_button_change(&m_lbs, send_push);
+								if (err_code != NRF_SUCCESS &&
+									err_code != BLE_ERROR_INVALID_CONN_HANDLE &&
+									err_code != NRF_ERROR_INVALID_STATE)
+								{
+									printf("BSP_EVENT_KEY_2 fail!\n");
+									APP_ERROR_CHECK(err_code);
+								}
+								send_push = !send_push;
+            break;
             case BSP_EVENT_KEY_3:
 								printf("BSP_EVENT_KEY_3!\n");
-                // Code to handle BSP_EVENT_KEY_0
-                break;
-            // Handle any other event
-
+						    err_code = ble_lbs_on_button_change(&m_lbs, send_push);
+								if (err_code != NRF_SUCCESS &&
+									err_code != BLE_ERROR_INVALID_CONN_HANDLE &&
+									err_code != NRF_ERROR_INVALID_STATE)
+								{
+									printf("BSP_EVENT_KEY_3 fail!\n");
+									APP_ERROR_CHECK(err_code);
+								}
+								send_push = !send_push;
+            break;
             default:
 								printf("button pressed!\n");							
                 APP_ERROR_HANDLER(evt);
@@ -552,8 +652,8 @@ static void bsp_module_init(void)
 
     // You can (if you configured an event handler) choose to assign events to buttons beyond the default configuration.
     // E.g:
-    //  uint32_t err_code = bsp_event_to_button_assign(BUTTON_0_ID, BSP_EVENT_KEY_SLEEP);
-    //  APP_ERROR_CHECK(err_code);
+//      uint32_t err_code = bsp_event_to_button_assign(BUTTON_0_ID, BSP_EVENT_KEY_SLEEP);
+//      APP_ERROR_CHECK(err_code);
 }
 
 
@@ -562,28 +662,56 @@ static void bsp_module_init(void)
 int main(void)
 {
     uint32_t err_code;
-    
+	
     // Initialize
+//    leds_init();
     timers_init();
+//    gpiote_init();
+//    buttons_init();
     ble_stack_init();
     bsp_module_init();
     scheduler_init();
     gap_params_init();
     advertising_init();
     services_init();
+    advertising_init();
     conn_params_init();
     sec_params_init();
-
+    
     // Start execution
-    timers_start();
     err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
     APP_ERROR_CHECK(err_code);
+    
     // Enter main loop
     for (;;)
     {
-      app_sched_execute();
-			power_manage();
+        app_sched_execute();
+        power_manage();
     }
+		
+//    uint32_t err_code;
+//    
+//    // Initialize
+//    timers_init();
+//    ble_stack_init();
+//    bsp_module_init();
+//    scheduler_init();
+//    gap_params_init();
+//    advertising_init();
+//    services_init();
+//    conn_params_init();
+//    sec_params_init();
+
+//    // Start execution
+//    timers_start();
+//    err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
+//    APP_ERROR_CHECK(err_code);
+//    // Enter main loop
+//    for (;;)
+//    {
+//      app_sched_execute();
+//			power_manage();
+//    }
 }
 
 /**
