@@ -51,9 +51,9 @@
 #define LEDBUTTON_BUTTON_ID             1
 // YOUR_JOB: Define any other buttons to be used by the applications:
 // #define MY_BUTTON_ID                   1
-#define ADVERTISING_LED_PIN_NO 					LED_2
+#define ADVERTISING_LED_PIN_NO 					LED_1
 #define CONNECTED_LED_PIN_NO   					LED_3
-#define LEDBUTTON_LED_PIN_NO   					LED_1
+#define LEDBUTTON_LED_PIN_NO   					LED_2
 
 #define DEVICE_NAME                     "Buttons_Template"                           /**< Name of device. Will be included in the advertising data. */
 
@@ -574,7 +574,8 @@ static void bsp_event_handler(bsp_event_t evt)
         {
             case BSP_EVENT_KEY_0:
 								printf("BSP_EVENT_KEY_0!\n");
-						    err_code = ble_lbs_on_button_change(&m_lbs, send_push);
+						    nrf_gpio_pin_clear(LED_2);
+						    err_code = ble_lbs_on_button_change(&m_lbs, 1);
 								if (err_code != NRF_SUCCESS &&
 									err_code != BLE_ERROR_INVALID_CONN_HANDLE &&
 									err_code != NRF_ERROR_INVALID_STATE)
@@ -585,8 +586,8 @@ static void bsp_event_handler(bsp_event_t evt)
             break;
             case BSP_EVENT_KEY_1:
 								printf("BSP_EVENT_KEY_1!\n");
-						        nrf_gpio_pin_clear(LED_2);
-						    err_code = ble_lbs_on_button_change(&m_lbs, send_push);
+				        nrf_gpio_pin_set(LED_2);
+						    err_code = ble_lbs_on_button_change(&m_lbs, 0);
 								if (err_code != NRF_SUCCESS &&
 									err_code != BLE_ERROR_INVALID_CONN_HANDLE &&
 									err_code != NRF_ERROR_INVALID_STATE)
@@ -598,31 +599,12 @@ static void bsp_event_handler(bsp_event_t evt)
             break;
 						case BSP_EVENT_KEY_2:
 								printf("BSP_EVENT_KEY_2!\n");
-						        nrf_gpio_pin_set(LED_2);
-						    err_code = ble_lbs_on_button_change(&m_lbs, send_push);
-								if (err_code != NRF_SUCCESS &&
-									err_code != BLE_ERROR_INVALID_CONN_HANDLE &&
-									err_code != NRF_ERROR_INVALID_STATE)
-								{
-									printf("BSP_EVENT_KEY_2 fail!\n");
-									APP_ERROR_CHECK(err_code);
-								}
-								send_push = !send_push;
             break;
             case BSP_EVENT_KEY_3:
 								printf("BSP_EVENT_KEY_3!\n");
-						    err_code = ble_lbs_on_button_change(&m_lbs, send_push);
-								if (err_code != NRF_SUCCESS &&
-									err_code != BLE_ERROR_INVALID_CONN_HANDLE &&
-									err_code != NRF_ERROR_INVALID_STATE)
-								{
-									printf("BSP_EVENT_KEY_3 fail!\n");
-									APP_ERROR_CHECK(err_code);
-								}
-								send_push = !send_push;
             break;
             default:
-								printf("button pressed!\n");							
+								printf("idk what happened\n");							
                 APP_ERROR_HANDLER(evt);
                 break;
         }
@@ -679,6 +661,7 @@ int main(void)
     sec_params_init();
     
     // Start execution
+    timers_start();
     err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
     APP_ERROR_CHECK(err_code);
     
@@ -688,30 +671,6 @@ int main(void)
         app_sched_execute();
         power_manage();
     }
-		
-//    uint32_t err_code;
-//    
-//    // Initialize
-//    timers_init();
-//    ble_stack_init();
-//    bsp_module_init();
-//    scheduler_init();
-//    gap_params_init();
-//    advertising_init();
-//    services_init();
-//    conn_params_init();
-//    sec_params_init();
-
-//    // Start execution
-//    timers_start();
-//    err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
-//    APP_ERROR_CHECK(err_code);
-//    // Enter main loop
-//    for (;;)
-//    {
-//      app_sched_execute();
-//			power_manage();
-//    }
 }
 
 /**
